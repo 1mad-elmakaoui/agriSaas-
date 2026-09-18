@@ -1,0 +1,47 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+dist/
+build/
+*.egg-info/
+
+# node
+node_modules/
+.vite/
+dist-ssr/
+*.local
+
+# data & artefacts
+*.db
+*.sqlite3
+*.pmtiles
+data/cache/
+evals/reports/*.json
+!evals/reports/.gitkeep
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# local clones of the three source repositories (Phase 0 audit)
+.sources/
+
+# venv de développement local
+.venv/

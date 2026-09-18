@@ -1,0 +1,56 @@
+# Pile locale : PostgreSQL 16 + PostGIS + pgvector, l'API, et les migrations.
+#
+# Deux choses ne sont pas de forme production et sont dites plutôt que cachées :
+# le mot de passe est un littéral, et les rôles applicatif et analytique vivent
+# dans la même instance. En déploiement réel, ils ont des mots de passe issus de
+# l'environnement, et la surface analytique peut vivre ailleurs.
+
+services:
+  db:
+    build:
+      context: ./docker
+      dockerfile: postgres.Dockerfile
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: atlas
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `pg_isready` répond avant que initdb ait fini : on interroge le
+      # catalogue, ce dont l'API a réellement besoin au démarrage.
+      test: ["CMD-SHELL", "psql -U postgres -d atlas -c 'SELECT 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  migrate:
+    build:
+      context: ./backend
+    environment:
+      ATLAS_MIGRATION_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/atlas
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ./backend
+    environment:
+      ATLAS_ENVIRONMENT: local
+      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas_app@db:5432/atlas
+      ATLAS_ANALYTICS_DATABASE_URL: postgresql+asyncpg://atlas_analytics_ro@db:5432/atlas
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+volumes:
+  pgdata:

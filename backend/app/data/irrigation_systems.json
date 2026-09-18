@@ -1,0 +1,64 @@
+{
+  "_meta": {
+    "generated_from": "agriflow- data/seed/irrigation_systems.json",
+    "source": "Indicative application-efficiency ranges from FAO Irrigation and Drainage Paper No. 24/56 and standard irrigation engineering references (Brouwer et al., FAO Training Manual No. 5). Efficiency is the fraction of the applied water that is stored in the root zone.",
+    "warning": "Application efficiency depends heavily on system design, maintenance and operator practice. The default below is a starting point: each field can override it in the database (irrigation_systems.efficiency)."
+  },
+  "systems": [
+    {
+      "code": "DRIP",
+      "name_fr": "Goutte-à-goutte",
+      "name_en": "Drip irrigation",
+      "efficiency": 0.9,
+      "efficiency_range_low": 0.85,
+      "efficiency_range_high": 0.95,
+      "efficiency_source": "Indicative application-efficiency ranges from FAO Irrigation and Drainage Paper No. 24/56 and standard irrigation engineering references (Brouwer et al., FAO Training Manual No. 5). Efficiency is the fraction of the applied water that is stored in the root zone.",
+      "wets_whole_surface": false,
+      "description_fr": "Apport localisé au pied de la plante. Efficience la plus élevée, dominante en reconversion au Maroc (PNEEI)."
+    },
+    {
+      "code": "MICRO_SPRINKLER",
+      "name_fr": "Micro-aspersion",
+      "name_en": "Micro-sprinkler",
+      "efficiency": 0.85,
+      "efficiency_range_low": 0.8,
+      "efficiency_range_high": 0.9,
+      "efficiency_source": "Indicative application-efficiency ranges from FAO Irrigation and Drainage Paper No. 24/56 and standard irrigation engineering references (Brouwer et al., FAO Training Manual No. 5). Efficiency is the fraction of the applied water that is stored in the root zone.",
+      "wets_whole_surface": false,
+      "description_fr": "Utilisée en arboriculture. Bonne efficience, sensible au vent."
+    },
+    {
+      "code": "SPRINKLER",
+      "name_fr": "Aspersion",
+      "name_en": "Sprinkler irrigation",
+      "efficiency": 0.75,
+      "efficiency_range_low": 0.7,
+      "efficiency_range_high": 0.8,
+      "efficiency_source": "Indicative application-efficiency ranges from FAO Irrigation and Drainage Paper No. 24/56 and standard irrigation engineering references (Brouwer et al., FAO Training Manual No. 5). Efficiency is the fraction of the applied water that is stored in the root zone.",
+      "wets_whole_surface": true,
+      "description_fr": "Couverture intégrale. Pertes par évaporation et dérive accrues par vent fort."
+    },
+    {
+      "code": "PIVOT",
+      "name_fr": "Pivot",
+      "name_en": "Centre pivot",
+      "efficiency": 0.8,
+      "efficiency_range_low": 0.75,
+      "efficiency_range_high": 0.85,
+      "efficiency_source": "Indicative application-efficiency ranges from FAO Irrigation and Drainage Paper No. 24/56 and standard irrigation engineering references (Brouwer et al., FAO Training Manual No. 5). Efficiency is the fraction of the applied water that is stored in the root zone.",
+      "wets_whole_surface": true,
+      "description_fr": "Aspersion mécanisée sur grandes surfaces céréalières."
+    },
+    {
+      "code": "FLOOD",
+      "name_fr": "Gravitaire",
+      "name_en": "Flood / surface irrigation",
+      "efficiency": 0.6,
+      "efficiency_range_low": 0.5,
+      "efficiency_range_high": 0.7,
+      "efficiency_source": "Indicative application-efficiency ranges from FAO Irrigation and Drainage Paper No. 24/56 and standard irrigation engineering references (Brouwer et al., FAO Training Manual No. 5). Efficiency is the fraction of the applied water that is stored in the root zone.",
+      "wets_whole_surface": true,
+      "description_fr": "Irrigation par submersion ou à la raie. Efficience la plus faible, encore répandue en grande hydraulique."
+    }
+  ]
+}

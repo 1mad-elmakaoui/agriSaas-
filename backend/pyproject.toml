@@ -1,0 +1,86 @@
+[project]
+name = "atlasagri"
+version = "0.1.0"
+description = "Plateforme de décision pour l'agriculture et les chaînes d'approvisionnement marocaines"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    # L'extra « email » n'est pas optionnel : `EmailStr` lève à l'import du
+    # module de schémas si `email-validator` manque. Une dépendance dont
+    # l'absence casse le démarrage est une dépendance déclarée.
+    "pydantic[email]>=2.9",
+    "pydantic-settings>=2.6",
+    "python-jose[cryptography]>=3.3",
+    "bcrypt>=4.2",
+    "structlog>=24.4",
+    "orjson>=3.10",
+    "httpx>=0.27",
+    # Le SDK est une dépendance de premier rang, pas un extra : la boucle
+    # d'agent est un chemin produit. Il reste installable sans clé — c'est
+    # une bibliothèque, pas un accès.
+    "anthropic>=1.0",
+    # Analyse du SQL généré en arbre syntaxique. C'est la couche 1 du socle :
+    # un filtre par expression régulière sur du texte SQL est un vœu, pas une
+    # garantie.
+    "sqlglot>=25.0",
+    # Suggestions de noms proches sur une colonne inconnue : une erreur qui
+    # nomme les trois candidats réels se répare en une tentative.
+    "rapidfuzz>=3.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "mypy>=1.13",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ASYNC", "S", "T20"]
+ignore = [
+    "S101",   # assert: used by the test suite
+    "RUF001", # ambiguous unicode: French text uses « » and non-breaking spaces
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]      # hard-coded test passwords are the point
+# Les migrations sont du DDL : PostgreSQL n'y accepte aucun paramètre lié, et
+# les seules valeurs interpolées sont des constantes de module. S608 y est donc
+# structurellement inapplicable — exempté ici plutôt que par des `noqa` répétés
+# qui finiraient par masquer un cas réel.
+"migrations/*" = ["N999", "E501", "S608"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
+disallow_any_generics = true
+exclude = ["migrations/versions/"]
+
+[[tool.mypy.overrides]]
+module = ["jose.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning:app.*"]

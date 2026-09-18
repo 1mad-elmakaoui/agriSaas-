@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "description": "Régions administratives du Maroc (découpage de 2015), restreintes à celles où le produit est déployé.",
+    "source": "Découpage administratif officiel du Royaume du Maroc, décret n° 2-15-40 (2015).",
+    "note": "Le code est stocké en anglais/ASCII majuscule, comme toute valeur d'énumération ; le libellé français et le libellé arabe accompagnent la ligne pour l'affichage."
+  },
+  "regions": [
+    {"code": "SOUSS_MASSA", "name_fr": "Souss-Massa", "name_ar": "سوس ماسة"},
+    {"code": "MARRAKECH_SAFI", "name_fr": "Marrakech-Safi", "name_ar": "مراكش آسفي"},
+    {"code": "CASABLANCA_SETTAT", "name_fr": "Casablanca-Settat", "name_ar": "الدار البيضاء سطات"},
+    {"code": "RABAT_SALE_KENITRA", "name_fr": "Rabat-Salé-Kénitra", "name_ar": "الرباط سلا القنيطرة"},
+    {"code": "BENI_MELLAL_KHENIFRA", "name_fr": "Béni Mellal-Khénifra", "name_ar": "بني ملال خنيفرة"},
+    {"code": "FES_MEKNES", "name_fr": "Fès-Meknès", "name_ar": "فاس مكناس"},
+    {"code": "TANGER_TETOUAN_AL_HOCEIMA", "name_fr": "Tanger-Tétouan-Al Hoceïma", "name_ar": "طنجة تطوان الحسيمة"},
+    {"code": "ORIENTAL", "name_fr": "Oriental", "name_ar": "الشرق"},
+    {"code": "DRAA_TAFILALET", "name_fr": "Drâa-Tafilalet", "name_ar": "درعة تافيلالت"}
+  ]
+}

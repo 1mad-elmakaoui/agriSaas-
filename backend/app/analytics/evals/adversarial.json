@@ -1,0 +1,335 @@
+{
+  "description": "Corpus adverse du socle SQL. Chaque cas nomme la couche censée l'attraper : un cas attrapé par une autre couche que celle annoncée est un signal, pas un succès. Les cas « tenant-* » sont neufs — le système d'origine listait la multi-location comme un non-objectif, et ses quatre couches ne l'adressent pas.",
+  "as_of_date": "2026-09-10",
+  "cases": [
+    {
+      "id": "dml-01",
+      "sql": "DELETE FROM analytics.v_shipments",
+      "expect": "security",
+      "why": "modifie les données",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-02",
+      "sql": "UPDATE analytics.v_shipments SET status = 'DELIVERED'",
+      "expect": "security",
+      "why": "modifie les données",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-03",
+      "sql": "INSERT INTO analytics.v_sites (code, name_fr) VALUES ('X', 'x')",
+      "expect": "security",
+      "why": "modifie les données",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-04",
+      "sql": "DROP VIEW analytics.v_shipments",
+      "expect": "security",
+      "why": "DDL",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-05",
+      "sql": "TRUNCATE app.shipments",
+      "expect": "security",
+      "why": "DDL",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-06",
+      "sql": "ALTER TABLE app.shipments ADD COLUMN x int",
+      "expect": "security",
+      "why": "DDL",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-07",
+      "sql": "GRANT SELECT ON app.shipments TO PUBLIC",
+      "expect": "security",
+      "why": "changement de privilège",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-08",
+      "sql": "WITH d AS (DELETE FROM app.shipments RETURNING id) SELECT d.id FROM d LIMIT 10",
+      "expect": "security",
+      "why": "écriture cachée dans une CTE ; l'arbre racine est un Select",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-09",
+      "sql": "WITH i AS (INSERT INTO app.sites (code) VALUES ('X') RETURNING id) SELECT i.id FROM i LIMIT 10",
+      "expect": "security",
+      "why": "écriture cachée dans une CTE",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-10",
+      "sql": "SELECT s.reference FROM analytics.v_shipments s LIMIT 10; DROP VIEW analytics.v_shipments",
+      "expect": "security",
+      "why": "seconde instruction",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-11",
+      "sql": "SELECT s.reference INTO snapshot FROM analytics.v_shipments s",
+      "expect": "security",
+      "why": "SELECT INTO est du DDL déguisé",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-12",
+      "sql": "SELECT s.reference FROM analytics.v_shipments s FOR UPDATE",
+      "expect": "security",
+      "why": "verrouillage de ligne",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-13",
+      "sql": "COPY app.shipments TO '/tmp/fuite.csv'",
+      "expect": "security",
+      "why": "écrit sur le système de fichiers du serveur",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-14",
+      "sql": "EXPLAIN ANALYZE DELETE FROM app.shipments",
+      "expect": "security",
+      "why": "instruction non classifiable : doit échouer en se fermant",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-15",
+      "sql": "DO $$ BEGIN DELETE FROM app.shipments; END $$",
+      "expect": "security",
+      "why": "bloc procédural",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-16",
+      "sql": "SET ROLE atlas_owner",
+      "expect": "security",
+      "why": "changer de rôle contournerait la RLS ; SET est refusé au niveau de l'instruction",
+      "layer": "statement_class"
+    },
+    {
+      "id": "dml-17",
+      "sql": "SET LOCAL app.current_tenant = '00000000-0000-0000-0000-000000000001'",
+      "expect": "security",
+      "why": "réécrire le GUC de tenant est LA tentative de franchissement la plus directe",
+      "layer": "statement_class"
+    },
+    {
+      "id": "fn-01",
+      "sql": "SELECT dblink('host=evil dbname=x', 'SELECT 1') AS t",
+      "expect": "security",
+      "why": "ouvre une connexion hors de la transaction en lecture seule",
+      "layer": "function_policy"
+    },
+    {
+      "id": "fn-02",
+      "sql": "SELECT query_to_xml('SELECT * FROM app.shipments', true, true, '')",
+      "expect": "security",
+      "why": "exécute une requête imbriquée que l'arbre ne voit jamais",
+      "layer": "function_policy"
+    },
+    {
+      "id": "fn-03",
+      "sql": "SELECT pg_read_file('/etc/passwd')",
+      "expect": "security",
+      "why": "lecture du système de fichiers",
+      "layer": "function_policy"
+    },
+    {
+      "id": "fn-04",
+      "sql": "SELECT lo_import('/etc/shadow')",
+      "expect": "security",
+      "why": "lecture du système de fichiers",
+      "layer": "function_policy"
+    },
+    {
+      "id": "fn-05",
+      "sql": "SELECT pg_sleep(3600)",
+      "expect": "security",
+      "why": "épuisement de ressource",
+      "layer": "function_policy"
+    },
+    {
+      "id": "fn-06",
+      "sql": "SELECT nextval('app.shipments_id_seq')",
+      "expect": "security",
+      "why": "une écriture qui se présente comme un appel de fonction",
+      "layer": "function_policy"
+    },
+    {
+      "id": "fn-07",
+      "sql": "SELECT pg_terminate_backend(1)",
+      "expect": "security",
+      "why": "déni de service",
+      "layer": "function_policy"
+    },
+    {
+      "id": "fn-08",
+      "sql": "SELECT current_setting('app.current_tenant')",
+      "expect": "security",
+      "why": "lit le GUC qui porte l'isolation : une organisation apprendrait son propre identifiant, et le motif se généralise",
+      "layer": "function_policy"
+    },
+    {
+      "id": "tenant-01",
+      "sql": "SELECT s.reference FROM app.shipments s LIMIT 10",
+      "expect": "security",
+      "why": "table de base : contient les expéditions de toutes les organisations",
+      "layer": "relation_allowlist"
+    },
+    {
+      "id": "tenant-02",
+      "sql": "SELECT t.id, t.name FROM app.tenants t LIMIT 10",
+      "expect": "security",
+      "why": "la table des organisations elle-même",
+      "layer": "relation_allowlist"
+    },
+    {
+      "id": "tenant-03",
+      "sql": "SELECT u.email FROM app.user_directory u LIMIT 10",
+      "expect": "security",
+      "why": "annuaire délibérément global : le seul endroit sans filtre d'organisation",
+      "layer": "relation_allowlist"
+    },
+    {
+      "id": "tenant-04",
+      "sql": "SELECT f.code FROM analytics.v_fields f JOIN app.fields b ON b.code = f.code LIMIT 10",
+      "expect": "security",
+      "why": "jointure d'une vue vers une table de base : la moitié filtrée légitime l'autre",
+      "layer": "relation_allowlist"
+    },
+    {
+      "id": "tenant-05",
+      "sql": "WITH tous AS (SELECT * FROM app.shipments) SELECT reference FROM tous LIMIT 10",
+      "expect": "security",
+      "why": "table de base dissimulée derrière un alias de CTE",
+      "layer": "relation_allowlist"
+    },
+    {
+      "id": "tenant-06",
+      "sql": "SELECT s.reference FROM analytics.v_shipments s WHERE s.id IN (SELECT id FROM app.shipments) LIMIT 10",
+      "expect": "security",
+      "why": "table de base dans une sous-requête",
+      "layer": "relation_allowlist"
+    },
+    {
+      "id": "tenant-07",
+      "sql": "SELECT c.relname FROM pg_catalog.pg_class c LIMIT 10",
+      "expect": "security",
+      "why": "sondage du catalogue : révèle des objets hors surface analytique",
+      "layer": "relation_allowlist"
+    },
+    {
+      "id": "tenant-08",
+      "sql": "SELECT table_name FROM information_schema.tables LIMIT 10",
+      "expect": "security",
+      "why": "même sondage par l'autre porte",
+      "layer": "relation_allowlist"
+    },
+    {
+      "id": "tenant-09",
+      "sql": "SELECT v.reference FROM public.v_shipments v LIMIT 10",
+      "expect": "security",
+      "why": "même nom de vue, autre schéma : rien ne garantit qu'il porte le filtre",
+      "layer": "relation_allowlist"
+    },
+    {
+      "id": "name-01",
+      "sql": "SELECT s.chiffre_affaires FROM analytics.v_shipments s LIMIT 10",
+      "expect": "validation",
+      "why": "colonne hallucinée",
+      "layer": "name_resolution"
+    },
+    {
+      "id": "name-02",
+      "sql": "SELECT t.id FROM analytics.v_transactions t LIMIT 10",
+      "expect": "validation",
+      "why": "vue hallucinée dans le bon schéma",
+      "layer": "name_resolution"
+    },
+    {
+      "id": "name-03",
+      "sql": "SELECT f.volume_tonnes FROM analytics.v_fields f LIMIT 10",
+      "expect": "validation",
+      "why": "la colonne existe ailleurs, pas sur cette vue",
+      "layer": "name_resolution"
+    },
+    {
+      "id": "name-04",
+      "sql": "SELECT code FROM analytics.v_fields f JOIN analytics.v_sites s ON s.code = f.site_code LIMIT 10",
+      "expect": "validation",
+      "why": "colonne non qualifiée ambiguë",
+      "layer": "name_resolution"
+    },
+    {
+      "id": "name-05",
+      "sql": "SELECT x.code FROM analytics.v_fields f LIMIT 10",
+      "expect": "validation",
+      "why": "alias non défini",
+      "layer": "name_resolution"
+    },
+    {
+      "id": "name-06",
+      "sql": "SELECT f.code FROM analytics.v_fields f JOIN analytics.v_sites s ON s.name_fr = f.area_ha LIMIT 10",
+      "expect": "validation",
+      "why": "jointure entre types incompatibles",
+      "layer": "joins"
+    },
+    {
+      "id": "name-07",
+      "sql": "SELECT f.code, s.code FROM analytics.v_fields f CROSS JOIN analytics.v_sites s LIMIT 10",
+      "expect": "validation",
+      "why": "produit cartésien",
+      "layer": "joins"
+    },
+    {
+      "id": "name-08",
+      "sql": "SELECT * FROM analytics.v_shipments LIMIT 10",
+      "expect": "validation",
+      "why": "SELECT * interdit",
+      "layer": "projection"
+    },
+    {
+      "id": "name-09",
+      "sql": "SELECT f.code, count(*) FROM analytics.v_fields f WHERE count(*) > 1 GROUP BY f.code",
+      "expect": "validation",
+      "why": "agrégat dans WHERE",
+      "layer": "aggregation"
+    },
+    {
+      "id": "name-10",
+      "sql": "SELECT sum(count(*)) FROM analytics.v_shipments s",
+      "expect": "validation",
+      "why": "agrégat imbriqué",
+      "layer": "aggregation"
+    },
+    {
+      "id": "name-11",
+      "sql": "SELECT FROM WHERE",
+      "expect": "validation",
+      "why": "erreur de syntaxe",
+      "layer": "parse"
+    },
+    {
+      "id": "explain-01",
+      "sql": "SELECT s.reference, s.status, count(*) AS n FROM analytics.v_shipments s GROUP BY s.status",
+      "expect": "explain",
+      "why": "couverture du GROUP BY : délibérément un avertissement à la couche 1",
+      "layer": "explain"
+    },
+    {
+      "id": "explain-02",
+      "sql": "SELECT s.reference FROM analytics.v_shipments s WHERE s.status > 5 LIMIT 10",
+      "expect": "explain",
+      "why": "texte comparé à un entier : demande le vérificateur de types du planificateur",
+      "layer": "explain"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+# Intégration continue.
+#
+# Le point important est en bas : les DSN de test sont **vérifiés présents**
+# plutôt que laissés absents. Une suite d'isolation silencieusement sautée est
+# indiscernable d'une suite d'isolation qui passe, et c'est exactement la
+# confusion que ce produit ne peut pas se permettre.
+
+name: CI
+
+on:
+   workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # PostGIS et pgvector sont tous deux nécessaires. L'image publique
+        # utilisée ici porte PostGIS ; pgvector est installé à l'étape suivante.
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: atlas
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      ATLAS_MIGRATION_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/atlas
+      ATLAS_TEST_DATABASE_URL: postgresql+asyncpg://atlas_app:atlas_app@127.0.0.1:5432/atlas
+      ATLAS_TEST_ANALYTICS_DATABASE_URL: postgresql+asyncpg://atlas_analytics_ro:atlas_analytics_ro@127.0.0.1:5432/atlas
+      ATLAS_TEST_OWNER_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/atlas
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pgvector into the service container
+        run: |
+          docker exec "$(docker ps -qf ancestor=postgis/postgis:16-3.4)" \
+            bash -c "apt-get update -qq && apt-get install -y -qq postgresql-16-pgvector"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        working-directory: backend
+        run: ruff check .
+
+      - name: Type check
+        working-directory: backend
+        run: mypy app
+
+      - name: Migrate
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Give the test roles a password
+        # La migration crée les rôles sans mot de passe : en local, `trust`
+        # suffit. Le conteneur de CI exige `scram-sha-256`.
+        run: |
+          psql -d atlas -c "ALTER ROLE atlas_app LOGIN PASSWORD 'atlas_app'"
+          psql -d atlas -c "ALTER ROLE atlas_analytics_ro LOGIN PASSWORD 'atlas_analytics_ro'"
+
+      - name: Refuse to run the suite without the isolation DSNs
+        # Sans ces variables, la suite d'isolation échoue au lieu d'être sautée
+        # — mais elle ne peut le faire que si l'on arrive jusqu'à elle. Ce
+        # contrôle attrape le cas où le service de base de données n'a pas
+        # démarré du tout.
+        run: |
+          test -n "$ATLAS_TEST_DATABASE_URL"           || { echo "app DSN unset" >&2; exit 1; }
+          test -n "$ATLAS_TEST_ANALYTICS_DATABASE_URL" || { echo "analytics DSN unset" >&2; exit 1; }
+          test -n "$ATLAS_TEST_OWNER_DATABASE_URL"     || { echo "owner DSN unset" >&2; exit 1; }
+
+      - name: Test
+        working-directory: backend
+        run: pytest -q -ra

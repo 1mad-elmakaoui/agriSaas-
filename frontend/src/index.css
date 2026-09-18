@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-feature-settings: 'cv05', 'ss01';
+  }
+
+  body {
+    @apply bg-ink-50 text-ink-800 antialiased;
+  }
+
+  /* Figures align in columns. A table of doses whose digits do not line up
+     forces the reader to compare character by character. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-ink-200 bg-white shadow-panel;
+  }
+
+  .panel-title {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-ink-500;
+  }
+
+  /* Focus is visible everywhere: an agronomist filling a moisture reading on a
+     tablet with a keyboard must be able to see where they are. */
+  .focusable {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-recommended focus-visible:ring-offset-1;
+  }
+}
