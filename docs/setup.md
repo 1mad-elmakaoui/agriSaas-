@@ -3,22 +3,27 @@
 ## Ce qui est nécessaire
 
 - Python 3.11
-- PostgreSQL 16, avec **PostGIS** et **pgvector**
+- PostgreSQL 16 avec **PostGIS**
 
-Les deux extensions sont requises ensemble et aucune image publique ne les fournit toutes les
-deux : `postgis/postgis` n'a pas pgvector, `pgvector/pgvector` n'a pas PostGIS.
-`docker/postgres.Dockerfile` construit l'image dérivée.
+`pgvector` était requis aussi ; il ne l'est plus. La récupération vectorielle a été écartée
+(décision 0016) et l'extension est devenue facultative (décision 0021) : l'image publique
+`postgis/postgis:16-3.4` suffit, sans couche dérivée. Installée, elle est créée ; absente,
+rien ne la réclame — la sonde de démarrage le dit en toutes lettres.
 
 ## Base de données
 
+Ce document décrit l'installation **sans conteneur**, celle d'un poste de développement qui
+fait tourner la suite de tests. Pour la pile complète en une commande, voir
+`docs/deployment.md` :
+
 ```bash
-docker compose up -d db          # ou un PostgreSQL 16 local
+docker compose up -d db          # la base seule, si vous voulez le reste en local
 ```
 
 Sur une installation Debian/Ubuntu locale :
 
 ```bash
-apt-get install postgresql-16 postgresql-16-postgis-3 postgresql-16-pgvector
+apt-get install postgresql-16 postgresql-16-postgis-3
 createdb atlas
 ```
 
@@ -77,7 +82,7 @@ Neuf sondes tournent avant que la première requête ne soit acceptée. En produ
 | `analytics_confinement` | un `GRANT` de trop rendant les tables de base atteignables |
 | `no_materialized_views` | une matview dans `analytics` : PostgreSQL n'y attache aucune politique |
 | `postgis` | requis en production ; dégrade ailleurs |
-| `pgvector` | requis par l'index de schéma de l'agent d'analyse |
+| `pgvector` | rien : la sonde **constate** sa présence ou son absence. Aucune capacité livrée n'en dépend (décisions 0016 et 0021) |
 
 `cross_tenant` prouve les deux sens : la ligne de l'organisation B **est** visible en tant que B,
 puis **ne l'est pas** en tant que A. Sans le premier temps, elle passerait sur une base vide en
@@ -92,6 +97,16 @@ export ATLAS_TEST_ANALYTICS_DATABASE_URL=postgresql+asyncpg://atlas_analytics_ro
 export ATLAS_TEST_OWNER_DATABASE_URL=postgresql+asyncpg://postgres@127.0.0.1:5432/atlas
 pytest -q
 ```
+
+Les DSN ci-dessus supposent une authentification locale `trust`. Contre une base en
+`scram-sha-256` — celle de la pile Docker, par exemple — les rôles ont besoin d'un mot de passe :
+
+```bash
+ATLAS_APP_ROLE_PASSWORD=… ATLAS_ANALYTICS_ROLE_PASSWORD=… python -m app.cli set-role-passwords
+```
+
+La migration les crée **sans** mot de passe : un mot de passe dans une migration est un mot de
+passe versionné, donc public.
 
 La suite tourne contre un **vrai PostgreSQL**, jamais SQLite : politiques, `FORCE`, propriété des
 vues et privilèges de rôle n'existent nulle part ailleurs. Sans DSN, elle **échoue** au lieu

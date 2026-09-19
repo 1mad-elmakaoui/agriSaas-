@@ -12,6 +12,7 @@ protéger. La différence est explicite, jamais implicite.
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -153,9 +154,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         plus tard.
         """
         token = run_id_var.set(new_run_id())
+        started = time.perf_counter()
         try:
             response = await call_next(request)
             response.headers["X-Run-Id"] = run_id_var.get() or ""
+            # La ligne d'accès est écrite ici et non par uvicorn, dont le
+            # journal ne porte ni identifiant de corrélation ni durée. C'est ce
+            # qui relie une ligne d'audit — « qui a vu quoi » — à la requête qui
+            # l'a produite, des mois plus tard.
+            #
+            # Aucune chaîne de requête n'est journalisée : elle contient des
+            # identifiants de ressources, et rien ne garantit qu'elle ne
+            # contiendra jamais autre chose.
+            logger.info(
+                "http_request",
+                method=request.method,
+                path=request.url.path,
+                status=response.status_code,
+                duration_ms=round((time.perf_counter() - started) * 1000, 1),
+            )
             return response
         finally:
             run_id_var.reset(token)

@@ -8,16 +8,17 @@
 name: CI
 
 on:
-   workflow_dispatch:
-
+  workflow_dispatch
 jobs:
   backend:
     runs-on: ubuntu-latest
 
     services:
       postgres:
-        # PostGIS et pgvector sont tous deux nécessaires. L'image publique
-        # utilisée ici porte PostGIS ; pgvector est installé à l'étape suivante.
+        # PostGIS seul : `pgvector` est devenu facultatif (décision 0021), et
+        # l'étape d'installation par `apt` qui suivait ici a disparu avec lui.
+        # Une étape de CI qui dépend d'un dépôt Debian joignable est une étape
+        # qui tombera un jour sans que le code ait changé.
         image: postgis/postgis:16-3.4
         env:
           POSTGRES_USER: postgres
@@ -47,11 +48,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install pgvector into the service container
-        run: |
-          docker exec "$(docker ps -qf ancestor=postgis/postgis:16-3.4)" \
-            bash -c "apt-get update -qq && apt-get install -y -qq postgresql-16-pgvector"
-
       - name: Install dependencies
         working-directory: backend
         run: pip install -e ".[dev]"
@@ -69,11 +65,14 @@ jobs:
         run: alembic upgrade head
 
       - name: Give the test roles a password
-        # La migration crée les rôles sans mot de passe : en local, `trust`
-        # suffit. Le conteneur de CI exige `scram-sha-256`.
-        run: |
-          psql -d atlas -c "ALTER ROLE atlas_app LOGIN PASSWORD 'atlas_app'"
-          psql -d atlas -c "ALTER ROLE atlas_analytics_ro LOGIN PASSWORD 'atlas_analytics_ro'"
+        # Par la commande du produit, et non par un `psql` parallèle : c'est
+        # celle qu'un opérateur lance en production, et la faire tourner ici est
+        # la seule façon de savoir qu'elle marche encore.
+        working-directory: backend
+        env:
+          ATLAS_APP_ROLE_PASSWORD: atlas_app
+          ATLAS_ANALYTICS_ROLE_PASSWORD: atlas_analytics_ro
+        run: python -m app.cli set-role-passwords
 
       - name: Refuse to run the suite without the isolation DSNs
         # Sans ces variables, la suite d'isolation échoue au lieu d'être sautée
@@ -88,3 +87,85 @@ jobs:
       - name: Test
         working-directory: backend
         run: pytest -q -ra
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+      - name: Test
+        working-directory: frontend
+        run: npm test -- --run
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  # La pile complète, construite et démarrée jusqu'à une recommandation servie.
+  # C'est ce qui empêche la phase 8 de se défaire en silence : un point d'entrée
+  # renommé, une commande de semis qui cesse d'être rejouable, un rôle sans mot
+  # de passe — rien de tout cela n'apparaît dans une suite de tests.
+  stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the stack
+        run: docker compose up -d --build
+
+      - name: Wait for the API to report healthy
+        run: |
+          for _ in $(seq 1 60); do
+            state=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q api)")
+            [ "$state" = "healthy" ] && exit 0
+            [ "$state" = "unhealthy" ] && break
+            sleep 5
+          done
+          docker compose logs
+          exit 1
+
+      - name: Serve a real recommendation
+        run: |
+          token=$(curl -sS -X POST http://127.0.0.1:8000/api/v1/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"agronome@souss-primeurs.ma","password":"demo-souss-primeurs-2026"}' \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+          curl -sS -f "http://127.0.0.1:8000/api/v1/parcelles/P03/irrigation" \
+            -H "Authorization: Bearer $token" \
+            | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["headline_fr"]); assert d["et0_mm_day"]'
+
+      - name: The stack restarts without failing on its own seed
+        # Le semis est rejouable, et cette étape est la seule qui le prouve :
+        # la première exécution ne rencontre jamais le cas.
+        run: |
+          docker compose up -d
+          docker compose logs seed | tail -5
+
+      - name: Back up and restore into an empty database
+        run: |
+          docker compose exec -T db pg_dumpall -U postgres --roles-only --no-role-passwords > roles.sql
+          docker compose exec -T db pg_dump -U postgres --dbname=atlas --format=custom > atlas.dump
+          docker compose exec -T db psql -U postgres -c 'CREATE DATABASE atlas_restore'
+          docker compose exec -T db psql -U postgres -d atlas_restore -f - < roles.sql || true
+          docker compose exec -T db pg_restore -U postgres --dbname=atlas_restore --exit-on-error < atlas.dump
+          docker compose exec -T db psql -U postgres -d atlas_restore -Atc "
+            SELECT CASE WHEN count(*) = 16 THEN 'force-rls ok'
+                        ELSE 'force-rls LOST: ' || count(*) END
+            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'app' AND c.relforcerowsecurity" | grep 'force-rls ok'
+
+      - name: Stop
+        if: always()
+        run: docker compose down -v

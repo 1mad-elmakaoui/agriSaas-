@@ -17,7 +17,6 @@ Revision ID: 0001_core
 Revises:
 """
 
-import contextlib
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -155,13 +154,29 @@ def upgrade() -> None:
     conn.execute(sa.text(f"GRANT USAGE ON SCHEMA {APP} TO {OWNER}"))
 
     # -- extensions -----------------------------------------------------
-    # pgvector porte l'index de schéma de l'agent d'analyse (phase 6).
-    conn.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
+    # Demandée **avant** d'être créée, et non tentée puis rattrapée. Un
+    # `CREATE EXTENSION` qui échoue avorte la transaction : l'exception est bien
+    # attrapée, mais tout ce qui suit échoue alors sur « current transaction is
+    # aborted ». C'est le défaut qu'une pile jamais démarrée conservait — la
+    # migration passait ici sur une base de développement où les deux extensions
+    # existaient, et cassait sur l'image publique où `vector` manque.
+    def _create_extension_if_available(name: str) -> None:
+        available = conn.execute(
+            sa.text("SELECT count(*) FROM pg_available_extensions WHERE name = :n"),
+            {"n": name},
+        ).scalar_one()
+        if available:
+            conn.execute(sa.text(f"CREATE EXTENSION IF NOT EXISTS {name}"))
+
+    # pgvector était prévu pour l'index de schéma de l'agent d'analyse. La
+    # décision 0016 a retiré la récupération vectorielle — six vues tiennent
+    # dans une invite — et la décision 0021 en tire la conséquence : l'extension
+    # est créée si elle est disponible, et son absence n'empêche rien.
+    _create_extension_if_available("vector")
     # PostGIS est requis en production. Son absence en développement désactive
     # les fonctions spatiales avec un avertissement, elle ne casse pas le
     # démarrage : la frontière canonique reste le GeoJSON portable.
-    with contextlib.suppress(sa.exc.DBAPIError):  # pragma: no cover - selon l'installation
-        conn.execute(sa.text("CREATE EXTENSION IF NOT EXISTS postgis"))
+    _create_extension_if_available("postgis")
 
     # -- tables ---------------------------------------------------------
     op.create_table(

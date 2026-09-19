@@ -199,6 +199,25 @@ cd backend && python -m app.analytics.evals.run
 
 Voir `docs/analytics-sql.md`.
 
+## Exploitation
+
+`docs/deployment.md` est un runbook, pas une hypothèse : il distingue à chaque étape ce qui a
+tourné de ce qui est écrit.
+
+**Journaux.** Hors développement, chaque ligne est un objet JSON — y compris celles d'`uvicorn`
+et d'`alembic`, routées par le même formateur. Chaque requête écrit une ligne `http_request`
+portant méthode, statut, durée et `run_id` ; ce même identifiant figure dans le journal d'audit,
+ce qui rattache « qui a vu quoi » à la requête qui l'a produit. La chaîne de requête n'est jamais
+journalisée, et `httpx` est ramené à WARNING pour la même raison — il journalisait l'URL
+complète de chaque appel sortant.
+
+**Sauvegarde.** `scripts/backup.sh` produit deux fichiers : les rôles de la grappe *et* la base.
+Un `pg_dump` seul ne contient pas les rôles, et sans eux la restauration échoue au premier
+`GRANT` — ou pire, réussit en rendant les tables au rôle qui restaure, ce qui conserve
+l'isolation sous une forme **décorative**. Le cycle a été exercé : après restauration, 16 tables
+en `FORCE`, 20 politiques, et une organisation étrangère voit 0 parcelle là où celle de
+démonstration en voit 7.
+
 ## L'isolation, en une phrase
 
 Les politiques d'isolation vivent sur les tables de base de `app`, avec `FORCE ROW LEVEL
@@ -212,25 +231,31 @@ présente, aucune erreur. C'est mesuré, pas supposé : `docs/decisions/0001-iso
 
 ## Démarrage
 
-Voir `docs/setup.md`. En bref :
+```bash
+docker compose up -d --build
+```
+
+Quatre services — base, migrations, semis, API — et la pile a **réellement été construite et
+démarrée** : jusqu'à une recommandation d'irrigation servie par l'API du conteneur, sur un
+volume vide. Les défauts qu'un fichier jamais exécuté conserve ont été trouvés en le lançant, et
+ils sont énumérés dans `docs/ce-qui-nest-pas-mesure.md`.
+
+Connexion de démonstration : `agronome@souss-primeurs.ma` / `demo-souss-primeurs-2026`.
+
+Pour développer sans conteneur, ou pour déployer ailleurs : `docs/setup.md` et
+`docs/deployment.md`.
 
 ```bash
-docker compose up -d db
-cd backend && pip install -e ".[dev]"
-ATLAS_MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres@127.0.0.1:5432/atlas alembic upgrade head
-python -m app.cli seed-reference && python -m app.cli seed-demo
-uvicorn "app.main:create_app" --factory --port 8000
-
-cd ../frontend && npm install && npm run dev
+cd frontend && npm install && npm run dev
 ```
 
 ## Documentation à produire
 
 Écrites : `setup.md` · `irrigation.md` · `risk-engine.md` · `analytics-sql.md` · `api.md` ·
-`mcp.md` · `frontend.md` · `conformite.md`
+`mcp.md` · `frontend.md` · `conformite.md` · `deployment.md`
 
 Restent à produire : `architecture.md` · `ml.md` · `alternatives.md` · `security.md` ·
-`deployment.md` · `methodologie-recherche.md` · `calibration-et-fiabilite.md`
+`methodologie-recherche.md` · `calibration-et-fiabilite.md`
 
 En français, et honnête : une capacité non opérationnelle n'est jamais présentée comme
 opérationnelle.

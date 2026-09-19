@@ -1,15 +1,24 @@
-# Pile locale : PostgreSQL 16 + PostGIS + pgvector, l'API, et les migrations.
+# Pile locale complète : PostgreSQL 16 + PostGIS, les migrations, le référentiel,
+# l'organisation de démonstration, puis l'API.
 #
-# Deux choses ne sont pas de forme production et sont dites plutôt que cachées :
-# le mot de passe est un littéral, et les rôles applicatif et analytique vivent
-# dans la même instance. En déploiement réel, ils ont des mots de passe issus de
-# l'environnement, et la surface analytique peut vivre ailleurs.
+# Cette pile a été **construite et démarrée** (phase 8). Ce qui suit n'est donc
+# pas un fichier plausible : les défauts qu'un fichier jamais exécuté conserve —
+# un point d'entrée ASGI qui n'existe pas, une sonde qui répond avant que la base
+# soit prête — ont été trouvés en le lançant.
+#
+# Trois choses ne sont pas de forme production, et sont dites plutôt que cachées :
+# le mot de passe est un littéral, les rôles applicatif et analytique vivent dans
+# la même instance, et aucun volume de sauvegarde n'est monté. Le guide de
+# déploiement (`docs/deployment.md`) dit ce qui change en production.
 
 services:
   db:
-    build:
-      context: ./docker
-      dockerfile: postgres.Dockerfile
+    # Image publique, sans couche dérivée. Le produit n'a besoin que de PostGIS :
+    # la récupération vectorielle a été écartée (décision 0016) et l'extension
+    # `vector` est désormais facultative (décision 0021). Une image dérivée
+    # coûtait un `apt-get` — c'est-à-dire un dépôt Debian joignable au moment de
+    # la construction — pour une extension que rien n'utilise.
+    image: postgis/postgis:16-3.4
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -19,8 +28,10 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      # `pg_isready` répond avant que initdb ait fini : on interroge le
-      # catalogue, ce dont l'API a réellement besoin au démarrage.
+      # `pg_isready` répond « prêt » pendant l'initialisation, sur la base
+      # temporaire qu'`initdb` utilise : les migrations démarraient alors sur une
+      # base qui disparaissait. On interroge donc le catalogue de `atlas`,
+      # c'est-à-dire ce dont les migrations ont réellement besoin.
       test: ["CMD-SHELL", "psql -U postgres -d atlas -c 'SELECT 1' || exit 1"]
       interval: 5s
       timeout: 5s
@@ -32,25 +43,77 @@ services:
       context: ./backend
     environment:
       ATLAS_MIGRATION_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/atlas
-    command: ["alembic", "upgrade", "head"]
+      # La migration crée les rôles **sans** mot de passe : un mot de passe dans
+      # une migration est un mot de passe versionné, donc public. La commande
+      # qui suit le pose depuis l'environnement. Sans elle, les rôles ne peuvent
+      # ouvrir aucune session par TCP — ce qui a fait échouer cette pile la
+      # première fois qu'elle a réellement été démarrée.
+      ATLAS_APP_ROLE_PASSWORD: ${ATLAS_APP_ROLE_PASSWORD:-atlas-local-app}
+      ATLAS_ANALYTICS_ROLE_PASSWORD: ${ATLAS_ANALYTICS_ROLE_PASSWORD:-atlas-local-analytics}
+    command:
+      ["sh", "-c", "alembic upgrade head && python -m app.cli set-role-passwords"]
+    # Un conteneur à acte unique n'a pas de santé à surveiller : la sonde héritée
+    # de l'image le marquerait « unhealthy » une fois son travail terminé.
+    healthcheck:
+      disable: true
     depends_on:
       db:
         condition: service_healthy
+
+  # Le référentiel agronomique et l'organisation de démonstration, dans cet
+  # ordre. Séparés des migrations : le schéma est une garantie, les données de
+  # démonstration sont un confort, et une pile de production lance le premier
+  # service sans le second (`docker compose up db migrate api`).
+  seed:
+    build:
+      context: ./backend
+    environment:
+      ATLAS_MIGRATION_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/atlas
+      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas_app:${ATLAS_APP_ROLE_PASSWORD:-atlas-local-app}@db:5432/atlas
+      ATLAS_ANALYTICS_DATABASE_URL: postgresql+asyncpg://atlas_analytics_ro:${ATLAS_ANALYTICS_ROLE_PASSWORD:-atlas-local-analytics}@db:5432/atlas
+      # Le compte de démonstration. `seed-demo` peuple une organisation sans
+      # personne dedans : sans cette dernière commande, la pile offrirait un
+      # produit complet que personne ne peut ouvrir.
+      ATLAS_NEW_USER_PASSWORD: ${ATLAS_DEMO_PASSWORD:-demo-souss-primeurs-2026}
+    command:
+      - "sh"
+      - "-c"
+      - >-
+        python -m app.cli seed-reference &&
+        python -m app.cli seed-demo &&
+        python -m app.cli create-user
+        --email agronome@souss-primeurs.ma
+        --name "Agronome de démonstration"
+        --role AGRONOME
+        --tenant-slug souss-primeurs
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   api:
     build:
       context: ./backend
     environment:
-      ATLAS_ENVIRONMENT: local
-      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas_app@db:5432/atlas
-      ATLAS_ANALYTICS_DATABASE_URL: postgresql+asyncpg://atlas_analytics_ro@db:5432/atlas
+      # `staging` plutôt que `local` : la pile Docker doit produire le **format
+      # de journal de production** — du JSON sur une seule ligne — sinon
+      # « journalisation structurée » n'est vérifié nulle part. `production`
+      # exigerait en plus un secret JWT et une résidence de données déclarés,
+      # ce qui est juste, et ce que le guide de déploiement demande de faire.
+      ATLAS_ENVIRONMENT: staging
+      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas_app:${ATLAS_APP_ROLE_PASSWORD:-atlas-local-app}@db:5432/atlas
+      ATLAS_ANALYTICS_DATABASE_URL: postgresql+asyncpg://atlas_analytics_ro:${ATLAS_ANALYTICS_ROLE_PASSWORD:-atlas-local-analytics}@db:5432/atlas
+      # Sans clé, le copilote et l'analyse répondent « indisponible » en
+      # français ; le reste du produit fonctionne. Une pile locale qui refuserait
+      # de démarrer faute de clé empêcherait d'ouvrir les écrans qui n'en ont pas
+      # besoin — c'est-à-dire presque tous.
+      ATLAS_ANTHROPIC_API_KEY: ${ATLAS_ANTHROPIC_API_KEY:-}
     ports:
       - "8000:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
-    command:
-      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 volumes:
   pgdata:

@@ -45,3 +45,7 @@ Thumbs.db
 
 # venv de développement local
 .venv/
+
+# Autorités déposées par un opérateur : jamais versionnées (voir backend/ca/LISEZMOI.md).
+backend/ca/*.crt
+backend/ca/*.pem

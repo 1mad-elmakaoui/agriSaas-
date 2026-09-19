@@ -409,12 +409,21 @@ async def _probe_pgvector(engine: AsyncEngine) -> ProbeResult:
             )
         ).scalar_one()
     if present:
-        return ProbeResult("pgvector", ProbeOutcome.PASS, "extension present")
+        return ProbeResult(
+            "pgvector",
+            ProbeOutcome.PASS,
+            "extension present; nothing shipped depends on it today",
+        )
+    # Pas DEGRADED : rien n'est dégradé. La récupération vectorielle a été
+    # délibérément écartée (décision 0016), l'agent d'analyse envoie le schéma
+    # entier, et il fonctionne à l'identique sans cette extension. Annoncer une
+    # capacité réduite qui ne l'est pas ferait douter d'un déploiement sain — et
+    # le jour où une sonde crie pour rien, on cesse de lire les sondes.
     return ProbeResult(
         "pgvector",
-        ProbeOutcome.DEGRADED,
-        "pgvector absent: the analytics schema index cannot be built. The "
-        "analytics agent is unavailable until it is installed.",
+        ProbeOutcome.PASS,
+        "extension absent; no shipped feature needs it (decision 0016). It "
+        "would be required again by a per-tenant schema index.",
     )
 
 

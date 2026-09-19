@@ -13,10 +13,10 @@ aucune valeur reprise d'une exécution voisine.
 | 2 | Aucun retour terrain collecté en production ; la boucle de correction n'a rien corrigé | première saison de retours, partition d'évaluation réservée | ouvert |
 | 3 | Les probabilités de perturbation ne sont pas calibrées sur un historique d'incidents marocains | score de Brier sur échantillon suffisant | ouvert |
 | 4 | Les seuils agronomiques sont des valeurs de départ, non validées par des agronomes marocains | revue par un agronome, `is_measured=true` par profil | ouvert — le mécanisme de surcharge existe depuis la phase 2 (une organisation peut poser sa propre ligne mesurée) ; aucune surcharge réelle n'a été saisie |
-| 5 | L'aller-retour réseau Copernicus (OAuth + réponse statistique) n'a jamais été exécuté | une acquisition réelle sur une parcelle de démonstration | ouvert |
+| 5 | L'aller-retour réseau Copernicus (OAuth + réponse statistique) n'a jamais été exécuté | des identifiants CDSE, un réseau qui joigne `identity.dataspace.copernicus.eu`, puis une acquisition réelle sur une parcelle de démonstration | ouvert — **et deux fois bloqué** : la phase 8 a tenté les deux hôtes CDSE, refusés par la politique réseau de cet environnement (403 sur le CONNECT), et aucun identifiant n'existe ici. Aucun adaptateur Copernicus n'a été écrit : l'humidité racinaire satellitaire n'est pas portée (lignes 9 et 10), donc ce serait un branchement sans consommateur |
 | 6 | L'aller-retour réseau OSRM n'a jamais été exécuté | un itinéraire réel contre une instance OSRM | ouvert |
 | 7 | La suite d'évaluation multilingue n'a jamais tourné contre un modèle réel | une clé, puis `python -m app.analytics.evals.run` étendu à la génération, résultat publié | ouvert — la suite existe (12 questions, français et arabe) et **le corpus** est mesuré : 11/11 requêtes de référence valides contre le catalogue réel. Ce chiffre mesure le corpus, pas le modèle, et le harnais l'imprime sur la ligne suivante |
-| 8 | La pile Docker n'a jamais été construite ni démarrée | `docker compose up --build` réussi et documenté | ouvert — l'image de base `postgis/postgis` est injoignable depuis l'environnement de développement (CDN Docker Hub refusé par la politique réseau) ; le `Dockerfile` et le `docker-compose.yml` sont écrits et **non vérifiés** |
+| 8 | La pile Docker n'a jamais été construite ni démarrée | `docker compose up --build` réussi et documenté | **comblée en phase 8** — construite et démarrée sur un volume vide jusqu'à une recommandation d'irrigation servie par l'API du conteneur. Quatre défauts que le fichier jamais exécuté conservait ont été trouvés en le lançant : un point d'entrée ASGI inexistant, un `CREATE EXTENSION` en échec qui avortait la migration entière, des rôles sans mot de passe incapables d'ouvrir une session par TCP, et une organisation de démonstration sans personne dedans |
 | 9 | L'humidité racinaire dérivée du satellite (SWEB) n'a aucune validation marocaine | comparaison contre sondes ou mesures gravimétriques locales | non commencé |
 | 10 | Les paramètres French & Schultz sont australiens | calibration sur données d'essai locales | non commencé |
 | 11 | L'enveloppe de contenu non fiable n'est appliquée à aucun résultat d'outil : `wrap_untrusted` est du code mort dans `atlasagri` et aucun test d'injection n'existe côté plateforme métier | câblage de l'enveloppe + une suite adverse par outil | **comblée en phase 4** — l'enveloppe est appliquée par le **registre**, donc à tout résultat d'outil, agent et MCP compris ; une balise de sortie glissée dans une valeur est neutralisée et le test le vérifie sur le chemin réel |
@@ -56,6 +56,9 @@ aucune valeur reprise d'une exécution voisine.
 | 45 | Les quotas sont vérifiés avant l'acte, dans la transaction de la requête : **deux requêtes simultanées peuvent passer la même vérification** et dépasser le plafond du nombre d'appels concurrents | une réservation atomique (verrou consultatif ou contrainte) mesurée sous concurrence | ouvert — le dépassement possible est borné par le nombre de requêtes en vol, et l'usage réel reste comptabilisé exactement puisqu'il est écrit en événements |
 | 46 | L'inscription est ouverte et **aucune mention d'information n'est présentée** : la personne saisit nom et courriel sans qu'un texte lui dise qui traite ces données, pour quelle finalité, ni comment exercer ses droits | un texte rédigé par le responsable de traitement, affiché au formulaire, plus un registre des consentements | ouvert — c'est le manquement le plus visible de `docs/conformite.md`, et il se comble par un texte, pas par du code |
 | 47 | La plateforme n'envoie **aucun courriel** : pas de vérification d'adresse, pas de réinitialisation de mot de passe en autonomie, et un membre ajouté reçoit son mot de passe provisoire par un canal que la plateforme ne connaît pas | un acheminement de courrier, puis une adresse vérifiée avant la première connexion | ouvert — l'interface le **dit** au lieu d'annoncer « invitation envoyée », ce qui serait la pire des deux options |
+| 48 | La pile Docker a été démarrée sur **un seul hôte**, avec un seul travailleur, et jamais derrière un terminaison TLS ni un reverse proxy. Aucune configuration systemd, aucun certificat, aucun déploiement sur un vrai serveur | un déploiement réel, puis le guide relu à partir de ce qui s'est passé | ouvert — `docs/deployment.md` distingue explicitement ce qui a tourné de ce qui est écrit |
+| 49 | La sauvegarde a été exercée sur une base de **démonstration** de quelques centaines de lignes : rien ne dit ce que durent `pg_dump` et `pg_restore` sur une installation réelle, ni si la fenêtre de restauration tient un engagement | un exercice de restauration chronométré sur un volume représentatif | ouvert — ce qui **est** vérifié est que la restauration conserve la propriété des tables, `FORCE`, les politiques et l'isolation : connecté comme `atlas_app`, une organisation étrangère voit 0 parcelle là où celle de démonstration en voit 7 |
+| 50 | Aucune sauvegarde n'est **planifiée** : `scripts/backup.sh` est écrit et exercé, rien ne l'appelle | une tâche planifiée, une rétention, et une alerte quand une sauvegarde manque | ouvert — une sauvegarde qui dépend de quelqu'un qui y pense n'est pas une sauvegarde |
 
 ## Valeurs importées — interdiction de reprise
 
@@ -139,6 +142,39 @@ coup.
 réellement été fait au champ. Personne n'a encore utilisé cet écran, et un
 exploitant qui clique « Accepter » sans lancer le tour d'eau produirait une
 trace fausse que rien ne rattrape (ligne 39).
+
+## Ce que la phase 8 a réellement vérifié
+
+**Exécuté, dans Docker, sur un volume vide :** `docker compose up -d --build`, les quatre
+migrations, le référentiel, l'organisation de démonstration, le compte pour s'y connecter, puis
+— par l'API du conteneur — une connexion, la liste des sept parcelles et la recommandation
+d'irrigation de P03 (« Irrigation recommandée : 2 186,7 m³ sur 15h05 »). Les neuf sondes passent
+dans le conteneur, dont `cross_tenant`.
+
+**Quatre défauts trouvés en le lançant**, qu'un fichier jamais exécuté conservait :
+
+1. `uvicorn app.main:app` — il n'existe aucun objet `app` importable, l'application est
+   construite par une fabrique. Le conteneur échouait à l'import ;
+2. `CREATE EXTENSION vector` dans un `contextlib.suppress` : l'exception était attrapée, mais la
+   transaction restait avortée et **toute la migration** échouait ensuite ;
+3. les rôles créés sans mot de passe n'ouvrent aucune session par TCP — ce qui ne se voit pas
+   sur une base locale en authentification `trust` ;
+4. `seed-demo` peuplait une organisation **sans personne dedans** : la pile offrait un produit
+   complet que personne ne pouvait ouvrir. Et rejouée, elle échouait sur une contrainte
+   d'unicité.
+
+**Sauvegarde et restauration exercées** sur cette base : dump, restauration dans une base
+neuve, puis vérification que les garanties survivent — 19 tables détenues par `atlas_owner`,
+16 tables en `FORCE ROW LEVEL SECURITY`, 20 politiques, 8 vues analytiques, `atlas_app` toujours
+`NOBYPASSRLS`. Connecté comme `atlas_app`, une organisation étrangère voit **0** parcelle là où
+celle de démonstration en voit 7.
+
+**Journalisation vérifiée dans le conteneur** : hors `local`, chaque ligne est un objet JSON,
+y compris celles d'`uvicorn`, et chaque requête écrit `http_request` avec son `run_id`.
+
+**Ce qui n'a pas pu tourner :** l'aller-retour Copernicus (ligne 5), refusé deux fois — hôtes
+CDSE bloqués par la politique réseau, et aucun identifiant présent. Un serveur réel, un
+certificat, un reverse proxy : lignes 48 à 50.
 
 ## Ce que la phase 7 a réellement vérifié
 
